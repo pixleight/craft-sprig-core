@@ -10,6 +10,7 @@ use Craft;
 use craft\elements\Entry;
 use putyourlightson\sprig\services\ComponentsService;
 use putyourlightson\sprig\Sprig;
+use Twig\Markup;
 use UnitTester;
 use yii\base\Application;
 use yii\base\ExitException;
@@ -38,6 +39,21 @@ class ComponentsTest extends Unit
         Sprig::bootstrap();
 
         Craft::$app->getView()->setTemplatesPath(Craft::getAlias('@templates'));
+    }
+
+
+    public function testHtmxScriptExistsForDev()
+    {
+        Craft::$app->getConfig()->env = 'dev';
+
+        $this->_testScriptExistsLocally();
+    }
+
+    public function testHtmxScriptExistsForProduction()
+    {
+        Craft::$app->getConfig()->env = 'production';
+
+        $this->_testScriptExistsLocally();
     }
 
     public function testCreate()
@@ -118,9 +134,14 @@ class ComponentsTest extends Unit
         $this->assertNull($object);
     }
 
-    public function testCreateInvalidVariableEntry()
+    public function testCreateVariableEntry()
     {
-        $this->_testCreateInvalidVariable(['number' => '', 'entry' => new Entry()]);
+        $this->_testCreateVariable(['number' => '', 'entry' => new Entry()]);
+    }
+
+    public function testCreateValidVariableArray()
+    {
+        $this->_testCreateVariable(['number' => '', 'array' => [new Entry()]]);
     }
 
     public function testCreateInvalidVariableModel()
@@ -135,7 +156,7 @@ class ComponentsTest extends Unit
 
     public function testCreateInvalidVariableArray()
     {
-        $this->_testCreateInvalidVariable(['number' => '', 'array' => [new Entry()]]);
+        $this->_testCreateInvalidVariable(['number' => '', 'array' => [new Model()]]);
     }
 
     public function testGetParsedTagAttributes()
@@ -274,6 +295,24 @@ class ComponentsTest extends Unit
         $html = '<div sprig placeholder="' . $placeholder . '"></div>';
         $result = Sprig::$core->components->parse($html);
         $this->assertStringContainsString($placeholder, $result);
+    }
+
+    private function _testScriptExistsLocally(): void
+    {
+        $url = Sprig::$core->components->getScriptUrl();
+        preg_match('/cpresources(.*?)\?v=/', $url, $matches);
+        $path = Craft::getAlias(Craft::$app->getConfig()->getGeneral()->resourceBasePath) . $matches[1];
+
+        $this->assertFileExists($path);
+    }
+
+    private function _testCreateVariable(array $variables): void
+    {
+        $this->tester->mockCraftMethods('view', ['doesTemplateExist' => true]);
+        Craft::$app->getView()->setTemplatesPath(Craft::getAlias('@templates'));
+        $markup = Sprig::$core->components->create('_component', $variables);
+
+        $this->assertInstanceOf(Markup::class, $markup);
     }
 
     private function _testCreateInvalidVariable(array $variables): void

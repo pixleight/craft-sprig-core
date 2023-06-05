@@ -9,7 +9,9 @@
         Invalid variable <code>{{ name }}</code> passed into <code>{{ componentName }}</code>
     </h1>
 
-    {{ include('sprig-core/_includes/' ~ type ~ '.md')|md }}
+    <p>
+        The variable <code>{{ name }}</code> {{ isArray ? 'is an array that contains' : 'is' }} an object and cannot be passed into a Sprig component.
+    </p>
 
 {% endblock %}
 

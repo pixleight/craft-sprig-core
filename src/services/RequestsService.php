@@ -7,6 +7,7 @@ namespace putyourlightson\sprig\services;
 
 use Craft;
 use craft\base\Component;
+use craft\base\ElementInterface;
 use craft\helpers\Json;
 use yii\web\BadRequestHttpException;
 
@@ -71,6 +72,17 @@ class RequestsService extends Component
         foreach ($param as $name => $value) {
             $value = self::validateData($value);
             $value = Json::decodeIfJson($value);
+
+            if (is_array($value) && !empty($value['element']['type'])) {
+                $elementType = $value['element']['type'];
+                if (is_subclass_of($elementType, ElementInterface::class)) {
+                    $value = $elementType::find()
+                        ->id($value['element']['id'])
+                        ->with($value['element']['with'] ?? null)
+                        ->one();
+                }
+            }
+
             $values[$name] = $value;
         }
 

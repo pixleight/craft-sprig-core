@@ -8,11 +8,14 @@ namespace putyourlightson\sprig\services;
 use Craft;
 use craft\base\Component as BaseComponent;
 use craft\base\ElementInterface;
+use craft\behaviors\CustomFieldBehavior;
+use craft\elements\MatrixBlock;
 use craft\helpers\Json;
 use craft\helpers\StringHelper;
 use craft\helpers\Template;
 use craft\helpers\UrlHelper;
 use craft\web\View;
+use Illuminate\Support\Collection;
 use putyourlightson\sprig\base\Component;
 use putyourlightson\sprig\components\RefreshOnLoad;
 use putyourlightson\sprig\events\ComponentEvent;
@@ -21,7 +24,6 @@ use putyourlightson\sprig\plugin\components\SprigPlayground;
 use putyourlightson\sprig\Sprig;
 use Twig\Markup;
 use yii\base\InvalidArgumentException;
-use yii\base\Model;
 use yii\log\Logger;
 use yii\web\BadRequestHttpException;
 use yii\web\Request;
@@ -336,9 +338,39 @@ class ComponentsService extends BaseComponent
     }
 
     /**
+     * Returns an element’s eager-loaded field handles.
+     */
+    private function _getEagerLoadedFieldHandles(ElementInterface $element): array
+    {
+        $handles = [];
+
+        $fieldHandles = array_keys(CustomFieldBehavior::$fieldHandles);
+        foreach ($fieldHandles as $handle) {
+            if ($element->hasEagerLoadedElements($handle)) {
+                /** @var Collection $elements */
+                $elements = $element->getEagerLoadedElements($handle);
+                if (!$elements->isEmpty()) {
+                    $elementHandles = $this->_getEagerLoadedFieldHandles($elements->first());
+
+                    // TODO: add cases for Neo and Supertable
+                    if ($element instanceof MatrixBlock) {
+                        $handle .= $element->getType();
+                    }
+
+                    $handle = implode('.', array_merge([$handle], $elementHandles));
+                }
+
+                $handles[] = $handle;
+            }
+        }
+
+        return $handles;
+    }
+
+    /**
      * Parses an array of attributes.
      */
-    private function _parseAttributes(array &$attributes)
+    private function _parseAttributes(array &$attributes): void
     {
         foreach ($attributes as $key => &$value) {
             $this->_parseAttribute($attributes, $key, $value);
@@ -348,7 +380,7 @@ class ComponentsService extends BaseComponent
     /**
      * Parses the Sprig attribute on an array of attributes.
      */
-    private function _parseSprigAttribute(array &$attributes)
+    private function _parseSprigAttribute(array &$attributes): void
     {
         $verb = 'get';
         $params = [];
@@ -376,7 +408,7 @@ class ComponentsService extends BaseComponent
     /**
      * Parses an attribute in an array of attributes.
      */
-    private function _parseAttribute(array &$attributes, string $key, array|string|bool $value)
+    private function _parseAttribute(array &$attributes, string $key, array|string|bool $value): void
     {
         if ($key == 'data' && is_array($value)) {
             foreach ($value as $dataKey => $dataValue) {
@@ -427,7 +459,7 @@ class ComponentsService extends BaseComponent
     /**
      * Merges new values to existing JSON attribute values.
      */
-    private function _mergeJsonAttributes(array &$attributes, string $name, array|string $values)
+    private function _mergeJsonAttributes(array &$attributes, string $name, array|string $values): void
     {
         if (is_string($values)) {
             if (str_starts_with($values, 'javascript:')) {
@@ -507,7 +539,7 @@ class ComponentsService extends BaseComponent
      */
     private function _hashVariable(string $name, mixed $value): string
     {
-        $this->_validateVariableType($name, $value);
+        $value = $this->_normalizeVariable($name, $value);
 
         if (is_array($value)) {
             $value = Json::encode($value);
@@ -517,41 +549,38 @@ class ComponentsService extends BaseComponent
     }
 
     /**
-     * Validates a variable type.
+     * Normalizes a variable.
      */
-    private function _validateVariableType(string $name, $value, $isArray = false)
+    private function _normalizeVariable(string $name, $value, $isArray = false): mixed
     {
-        $variable = [
-            'name' => $name,
-            'value' => $value,
-            'isArray' => $isArray,
-        ];
-
         if ($value instanceof ElementInterface) {
-            $this->_throwError('element', $variable);
-        }
-
-        if ($value instanceof Model) {
-            $this->_throwError('model', $variable);
-        }
-
-        if (is_object($value)) {
-            $this->_throwError('object', $variable);
-        }
-
-        if (is_array($value)) {
-            foreach ($value as $arrayValue) {
-                $this->_validateVariableType($name, $arrayValue, true);
+            $value = [
+                'element' => [
+                    'type' => $value::class,
+                    'id' => $value->id,
+                    'with' => $this->_getEagerLoadedFieldHandles($value)
+                ],
+            ];
+        } elseif (is_array($value)) {
+            foreach ($value as &$arrayValue) {
+                $arrayValue = $this->_normalizeVariable($name, $arrayValue, true);
             }
+        } elseif (is_object($value)) {
+            $this->_throwError([
+                'name' => $name,
+                'value' => $value,
+                'isArray' => $isArray,
+            ]);
         }
+
+        return $value;
     }
 
     /**
      * Throws an error from a rendered template.
      */
-    private function _throwError(string $type, array $variables = []): void
+    private function _throwError(array $variables = []): void
     {
-        $variables['type'] = $type;
         $variables['componentName'] = $this->_componentName;
 
         $content = Craft::$app->getView()->renderPageTemplate('sprig-core/_error', $variables, View::TEMPLATE_MODE_CP);

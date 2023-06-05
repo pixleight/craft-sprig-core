@@ -7,7 +7,6 @@ namespace putyourlightson\sprig\variables;
 
 use Craft;
 use craft\db\Paginator;
-use craft\helpers\Html;
 use craft\helpers\Template;
 use craft\web\twig\variables\Paginate;
 use putyourlightson\sprig\base\Component;
@@ -18,22 +17,15 @@ use yii\db\Query;
 class SprigVariable
 {
     /**
-     * @var string The htmx version to load (must exist in `src/resources/lib/htmx`).
-     * Downloaded from https://unpkg.com/htmx.org
-     */
-    public string $htmxVersion = '1.9.2';
-
-    /**
      * Returns the script tag with the given attributes.
+     *
+     * @deprecated in 3.0.0
      */
     public function getScript(array $attributes = []): Markup
     {
-        $path = '@putyourlightson/sprig/resources/lib/htmx/' . $this->htmxVersion . '/';
-        $path .= Craft::$app->getConfig()->env == 'dev' ? 'htmx.js' : 'htmx.min.js';
-        $url = Craft::$app->getAssetManager()->getPublishedUrl($path, true);
-        $script = Html::jsFile($url, $attributes);
+        Craft::$app->getDeprecator()->log(__METHOD__, '`sprig.script` has been deprecated. It is no longer required and can be safely removed.');
 
-        return Template::raw($script);
+        return Template::raw('');
     }
 
     /**

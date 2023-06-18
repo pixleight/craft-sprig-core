@@ -71,19 +71,7 @@ class RequestsService extends Component
 
         foreach ($param as $name => $value) {
             $value = self::validateData($value);
-            $value = Json::decodeIfJson($value);
-
-            if (is_array($value) && !empty($value['element']['type'])) {
-                $elementType = $value['element']['type'];
-                if (is_subclass_of($elementType, ElementInterface::class)) {
-                    $value = $elementType::find()
-                        ->id($value['element']['id'])
-                        ->with($value['element']['with'] ?? null)
-                        ->one();
-                }
-            }
-
-            $values[$name] = $value;
+            $values[$name] = $this->_normalizeValue($value);
         }
 
         return $values;
@@ -119,5 +107,27 @@ class RequestsService extends Component
         }
 
         return true;
+    }
+
+    private function _normalizeValue(string $value): mixed
+    {
+        $value = Json::decodeIfJson($value);
+
+        if (is_string($value)) {
+            preg_match('/^element:(.*?):([0-9]*?):(.*)$/', $value, $matches);
+            if (!empty($matches)) {
+                $elementType = $matches[1];
+                if ($elementType instanceof ElementInterface) {
+                    $elementId = $matches[2];
+                    $with = explode(',', $matches[3]);
+                    $value = $elementType::find()
+                        ->id($elementId)
+                        ->with($with)
+                        ->one();
+                }
+            }
+        }
+
+        return $value;
     }
 }

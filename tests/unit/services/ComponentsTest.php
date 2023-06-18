@@ -139,11 +139,6 @@ class ComponentsTest extends Unit
         $this->_testCreateVariable(['number' => '', 'entry' => new Entry()]);
     }
 
-    public function testCreateValidVariableArray()
-    {
-        $this->_testCreateVariable(['number' => '', 'array' => [new Entry()]]);
-    }
-
     public function testCreateInvalidVariableModel()
     {
         $this->_testCreateInvalidVariable(['number' => '', 'model' => new Model()]);
@@ -156,7 +151,7 @@ class ComponentsTest extends Unit
 
     public function testCreateInvalidVariableArray()
     {
-        $this->_testCreateInvalidVariable(['number' => '', 'array' => [new Model()]]);
+        $this->_testCreateInvalidVariable(['number' => '', 'array' => [new Entry()]]);
     }
 
     public function testGetParsedTagAttributes()

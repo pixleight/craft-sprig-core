@@ -5,6 +5,7 @@
 
 namespace putyourlightson\sprig\services;
 
+use benf\neo\elements\Block as NeoBlock;
 use Craft;
 use craft\base\Component as BaseComponent;
 use craft\base\ElementInterface;
@@ -15,7 +16,6 @@ use craft\helpers\StringHelper;
 use craft\helpers\Template;
 use craft\helpers\UrlHelper;
 use craft\web\View;
-use Illuminate\Support\Collection;
 use putyourlightson\sprig\base\Component;
 use putyourlightson\sprig\components\RefreshOnLoad;
 use putyourlightson\sprig\events\ComponentEvent;
@@ -360,33 +360,50 @@ class ComponentsService extends BaseComponent
     }
 
     /**
-     * Returns an element’s eager-loaded field handles.
+     * Returns an element’s eager-loaded field mapping.
      */
-    private function _getEagerLoadedFieldHandles(ElementInterface $element): array
+    private function _getEagerLoadedFieldMapping(ElementInterface $element): array
     {
-        $handles = [];
+        $fieldMapping = [];
 
         $fieldHandles = array_keys(CustomFieldBehavior::$fieldHandles);
         foreach ($fieldHandles as $handle) {
             if ($element->hasEagerLoadedElements($handle)) {
-                /** @var Collection $elements */
-                $elements = $element->getEagerLoadedElements($handle);
-                if (!$elements->isEmpty()) {
-                    $elementHandles = $this->_getEagerLoadedFieldHandles($elements->first());
-
-                    // TODO: add cases for Neo and Supertable
-                    if ($element instanceof MatrixBlock) {
-                        $handle .= $element->getType();
-                    }
-
-                    $handle = implode('.', array_merge([$handle], $elementHandles));
+                if ($element instanceof MatrixBlock || $element instanceof NeoBlock) {
+                    $handle = $element->getType() . ':' . $handle;
                 }
 
-                $handles[] = $handle;
+                $fieldMapping[$handle] = [];
+
+                $elements = $element->getEagerLoadedElements($handle);
+                foreach ($elements as $subElement) {
+                    $fieldMapping[$handle] = array_merge(
+                        $fieldMapping[$handle],
+                        $this->_getEagerLoadedFieldMapping($subElement),
+                    );
+                }
             }
         }
 
-        return $handles;
+        return $fieldMapping;
+    }
+
+    /**
+     * Returns a flattened eager-loaded field mapping.
+     */
+    private function _getFlattenedFieldMapping(array $fieldMapping): string
+    {
+        foreach ($fieldMapping as $key => $value) {
+            if (is_string($value)) {
+                return $value;
+            }
+
+            $flattened = $this->_getFlattenedFieldMapping($value);
+
+            return $key . ($flattened ? '.' . $flattened : '');
+        }
+
+        return '';
     }
 
     /**
@@ -561,7 +578,8 @@ class ComponentsService extends BaseComponent
      */
     private function _hashVariable(string $name, mixed $value): string
     {
-        $value = $this->_normalizeVariable($name, $value);
+        $value = $this->_normalizeValue($value);
+        $this->_validateVariable($name, $value);
 
         if (is_array($value)) {
             $value = Json::encode($value);
@@ -571,28 +589,34 @@ class ComponentsService extends BaseComponent
     }
 
     /**
-     * Normalizes a variable.
+     * Validates a variable.
      */
-    private function _normalizeVariable(string $name, $value, $isArray = false): mixed
+    private function _validateVariable(string $name, $value, $isArray = false): void
     {
-        if ($value instanceof ElementInterface) {
-            $value = [
-                'element' => [
-                    'type' => $value::class,
-                    'id' => $value->id,
-                    'with' => $this->_getEagerLoadedFieldHandles($value)
-                ],
-            ];
-        } elseif (is_array($value)) {
-            foreach ($value as &$arrayValue) {
-                $arrayValue = $this->_normalizeVariable($name, $arrayValue, true);
+        if (is_array($value)) {
+            foreach ($value as $arrayValue) {
+                $this->_validateVariable($name, $arrayValue, true);
             }
-        } elseif (is_object($value)) {
+        }
+
+        if (is_object($value)) {
             $this->_throwError([
                 'name' => $name,
                 'value' => $value,
                 'isArray' => $isArray,
             ]);
+        }
+    }
+
+    /**
+     * Normalizes a value.
+     */
+    private function _normalizeValue(mixed $value): mixed
+    {
+        if ($value instanceof ElementInterface) {
+            $with = json_encode($this->_getEagerLoadedFieldMapping($value));
+
+            return 'element:' . $value::class . ':' . $value->id . ':' . $with;
         }
 
         return $value;

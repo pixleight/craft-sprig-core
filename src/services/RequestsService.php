@@ -9,9 +9,11 @@ use Craft;
 use craft\base\Component;
 use craft\base\ElementInterface;
 use craft\helpers\Json;
+use putyourlightson\sprig\models\ConfigModel;
 use yii\web\BadRequestHttpException;
 
 /**
+ * @property-read ConfigModel $validatedConfig
  * @property-read array $variables
  */
 class RequestsService extends Component
@@ -27,12 +29,11 @@ class RequestsService extends Component
     public function getVariables(): array
     {
         $variables = [];
-
         $request = Craft::$app->getRequest();
 
         $requestParams = array_merge(
             $request->getQueryParams(),
-            $request->getBodyParams()
+            $request->getBodyParams(),
         );
 
         foreach ($requestParams as $name => $value) {
@@ -45,50 +46,26 @@ class RequestsService extends Component
     }
 
     /**
-     * Returns a validated request parameter.
+     * Returns a validated config request parameter.
      */
-    public function getValidatedParam(string $name): bool|string|null
+    public function getValidatedConfig(): ConfigModel
     {
-        $value = Craft::$app->getRequest()->getParam($name);
-
-        if ($value !== null) {
-            $value = self::validateData($value);
-        }
-
-        return $value;
-    }
-
-    /**
-     * Returns an array of validated request parameter values.
-     *
-     * @return string[]
-     */
-    public function getValidatedParamValues(string $name): array
-    {
-        $values = [];
-
-        $param = Craft::$app->getRequest()->getParam($name, []);
-
-        foreach ($param as $name => $value) {
-            $value = self::validateData($value);
-            $values[$name] = $this->_normalizeValue($value);
-        }
-
-        return $values;
-    }
-
-    /**
-     * Validates if the given data is tampered with and throws an exception if it is.
-     */
-    public function validateData(mixed $value): string
-    {
+        $value = Craft::$app->getRequest()->getParam('sprig:config');
         $value = Craft::$app->getSecurity()->validateData($value);
 
         if ($value === false) {
-            throw new BadRequestHttpException('Submitted data was tampered.');
+            throw new BadRequestHttpException('Invalid Sprig config.');
         }
 
-        return $value;
+        $values = Json::decode($value);
+        $config = new ConfigModel();
+        $config->setAttributes($values, false);
+
+        foreach ($config->variables as $name => $value) {
+            $config->variables[$name] = $this->_normalizeValue($value);
+        }
+
+        return $config;
     }
 
     /**
@@ -117,7 +94,7 @@ class RequestsService extends Component
             preg_match('/^element:(.*?):([0-9]*?):(.*)$/', $value, $matches);
             if (!empty($matches)) {
                 $elementType = $matches[1];
-                if ($elementType instanceof ElementInterface) {
+                if (is_subclass_of($elementType, ElementInterface::class)) {
                     $elementId = $matches[2];
                     $with = explode(',', $matches[3]);
                     $value = $elementType::find()

@@ -138,7 +138,7 @@ class Sprig extends Module
     private function _registerGeneratorTypes(): void
     {
         if (class_exists(Command::class)) {
-            Event::on(Command::class, Command::EVENT_REGISTER_GENERATOR_TYPES, function (RegisterComponentTypesEvent $event) {
+            Event::on(Command::class, Command::EVENT_REGISTER_GENERATOR_TYPES, function(RegisterComponentTypesEvent $event) {
                 $event->types[] = SprigComponent::class;
             });
         }

@@ -20,6 +20,7 @@ use putyourlightson\sprig\base\Component;
 use putyourlightson\sprig\components\RefreshOnLoad;
 use putyourlightson\sprig\events\ComponentEvent;
 use putyourlightson\sprig\helpers\Html;
+use putyourlightson\sprig\models\ConfigModel;
 use putyourlightson\sprig\plugin\components\SprigPlayground;
 use putyourlightson\sprig\Sprig;
 use Twig\Markup;
@@ -157,10 +158,10 @@ class ComponentsService extends BaseComponent
     public function create(string $value, array $variables = [], array $attributes = []): Markup
     {
         $this->_componentName = $value;
-        $values = [];
 
-        $siteId = Craft::$app->getSites()->getCurrentSite()->id;
-        $values['sprig:siteId'] = Craft::$app->getSecurity()->hashData((string)$siteId);
+        $values = [];
+        $config = new ConfigModel();
+        $config->siteId = Craft::$app->getSites()->getCurrentSite()->id;
 
         $mergedVariables = array_merge(
             $variables,
@@ -182,10 +183,11 @@ class ComponentsService extends BaseComponent
         $componentObject = $this->createObject($value, $mergedVariables);
 
         if ($componentObject) {
-            $type = 'component';
+            $config->component = $value;
+
             $renderedContent = $componentObject->render();
         } else {
-            $type = 'template';
+            $config->template = $value;
 
             if (!Craft::$app->getView()->doesTemplateExist($value)) {
                 throw new BadRequestHttpException('Unable to find the component or template “' . $value . '”.');
@@ -193,17 +195,15 @@ class ComponentsService extends BaseComponent
 
             // Unset the component type, so that nested components will work.
             // https://github.com/putyourlightson/craft-sprig/issues/243
-            $values['sprig:component'] = Craft::$app->getSecurity()->hashData('');
+            $config->component = '';
 
             $renderedContent = Craft::$app->getView()->renderTemplate($value, $mergedVariables);
         }
 
         $content = $this->parse($renderedContent);
 
-        $values['sprig:' . $type] = Craft::$app->getSecurity()->hashData($value);
-
         foreach ($variables as $name => $val) {
-            $values['sprig:variables[' . $name . ']'] = $this->_hashVariable($name, $val);
+            $config->variables[$name] = $this->_normalizeVariable($name, $val);
         }
 
         // Add token to values if this is a preview request.
@@ -221,6 +221,11 @@ class ComponentsService extends BaseComponent
 
         // Allow ID to be overridden, otherwise ensure random ID does not start with a digit (to avoid a JS error)
         $id = $attributes['id'] ?? ('component-' . StringHelper::randomString(6));
+
+        $values = array_merge(
+            ['sprig:config' => $config->getHashed()],
+            $values,
+        );
 
         // Merge base attributes with provided attributes first, to ensure that `hx-vals` is included in the attributes when they are parsed.
         $attributes = array_merge(
@@ -574,18 +579,22 @@ class ComponentsService extends BaseComponent
     }
 
     /**
-     * Hashes a variable, possibly throwing an exception.
+     * Normalizes a variable, possibly throwing an exception.
      */
-    private function _hashVariable(string $name, mixed $value): string
+    private function _normalizeVariable(string $name, mixed $value): ?string
     {
-        $value = $this->_normalizeValue($value);
+        if ($value instanceof ElementInterface) {
+            $with = json_encode($this->_getEagerLoadedFieldMapping($value));
+            $value = 'element:' . $value::class . ':' . $value->id . ':' . $with;
+        }
+
         $this->_validateVariable($name, $value);
 
         if (is_array($value)) {
             $value = Json::encode($value);
         }
 
-        return Craft::$app->getSecurity()->hashData($value);
+        return $value;
     }
 
     /**
@@ -606,20 +615,6 @@ class ComponentsService extends BaseComponent
                 'isArray' => $isArray,
             ]);
         }
-    }
-
-    /**
-     * Normalizes a value.
-     */
-    private function _normalizeValue(mixed $value): mixed
-    {
-        if ($value instanceof ElementInterface) {
-            $with = json_encode($this->_getEagerLoadedFieldMapping($value));
-
-            return 'element:' . $value::class . ':' . $value->id . ':' . $with;
-        }
-
-        return $value;
     }
 
     /**

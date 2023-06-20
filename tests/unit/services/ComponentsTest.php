@@ -133,24 +133,29 @@ class ComponentsTest extends Unit
         $this->assertNull($object);
     }
 
+    public function testCreateVariable()
+    {
+        $this->_testCreateVariable(['number' => 1]);
+    }
+
     public function testCreateVariableEntry()
     {
-        $this->_testCreateVariable(['number' => '', 'entry' => new Entry()]);
+        $this->_testCreateInvalidVariable(['number' => 1, 'entry' => new Entry()]);
     }
 
     public function testCreateInvalidVariableModel()
     {
-        $this->_testCreateInvalidVariable(['number' => '', 'model' => new Model()]);
+        $this->_testCreateInvalidVariable(['number' => 1, 'model' => new Model()]);
     }
 
     public function testCreateInvalidVariableObject()
     {
-        $this->_testCreateInvalidVariable(['number' => '', 'model' => (object)[]]);
+        $this->_testCreateInvalidVariable(['number' => 1, 'model' => (object)[]]);
     }
 
     public function testCreateInvalidVariableArray()
     {
-        $this->_testCreateInvalidVariable(['number' => '', 'array' => [new Entry()]]);
+        $this->_testCreateInvalidVariable(['number' => 1, 'array' => [new Entry()]]);
     }
 
     public function testGetParsedTagAttributes()

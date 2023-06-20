@@ -202,8 +202,9 @@ class ComponentsService extends BaseComponent
 
         $content = $this->parse($renderedContent);
 
-        foreach ($variables as $name => $val) {
-            $config->variables[$name] = $this->_normalizeVariable($name, $val);
+        foreach ($variables as $name => $variable) {
+            $this->_validateVariable($name, $variable);
+            $config->variables[$name] = $this->_normalizeVariable($variable);
         }
 
         // Add token to values if this is a preview request.
@@ -362,53 +363,6 @@ class ComponentsService extends BaseComponent
         preg_match('/<([\w\-]+)/', $tag, $match);
 
         return strtolower($match[1]);
-    }
-
-    /**
-     * Returns an element’s eager-loaded field mapping.
-     */
-    private function _getEagerLoadedFieldMapping(ElementInterface $element): array
-    {
-        $fieldMapping = [];
-
-        $fieldHandles = array_keys(CustomFieldBehavior::$fieldHandles);
-        foreach ($fieldHandles as $handle) {
-            if ($element->hasEagerLoadedElements($handle)) {
-                if ($element instanceof MatrixBlock || $element instanceof NeoBlock) {
-                    $handle = $element->getType() . ':' . $handle;
-                }
-
-                $fieldMapping[$handle] = [];
-
-                $elements = $element->getEagerLoadedElements($handle);
-                foreach ($elements as $subElement) {
-                    $fieldMapping[$handle] = array_merge(
-                        $fieldMapping[$handle],
-                        $this->_getEagerLoadedFieldMapping($subElement),
-                    );
-                }
-            }
-        }
-
-        return $fieldMapping;
-    }
-
-    /**
-     * Returns a flattened eager-loaded field mapping.
-     */
-    private function _getFlattenedFieldMapping(array $fieldMapping): string
-    {
-        foreach ($fieldMapping as $key => $value) {
-            if (is_string($value)) {
-                return $value;
-            }
-
-            $flattened = $this->_getFlattenedFieldMapping($value);
-
-            return $key . ($flattened ? '.' . $flattened : '');
-        }
-
-        return '';
     }
 
     /**
@@ -579,17 +533,26 @@ class ComponentsService extends BaseComponent
     }
 
     /**
-     * Normalizes a variable, possibly throwing an exception.
+     * Validates a variable.
      */
-    private function _normalizeVariable(string $name, mixed $value): ?string
+    private function _validateVariable(string $name, mixed $value): void
     {
-        if ($value instanceof ElementInterface) {
-            $with = json_encode($this->_getEagerLoadedFieldMapping($value));
-            $value = 'element:' . $value::class . ':' . $value->id . ':' . $with;
+        if (is_array($value)) {
+            foreach ($value as $variable) {
+                $this->_validateVariable($name, $variable);
+            }
         }
 
-        $this->_validateVariable($name, $value);
+        if (is_object($value)) {
+            $this->_throwError($name, $value);
+        }
+    }
 
+    /**
+     * Normalizes a variable.
+     */
+    private function _normalizeVariable(mixed $value): ?string
+    {
         if (is_array($value)) {
             $value = Json::encode($value);
         }
@@ -598,31 +561,15 @@ class ComponentsService extends BaseComponent
     }
 
     /**
-     * Validates a variable.
-     */
-    private function _validateVariable(string $name, $value, $isArray = false): void
-    {
-        if (is_array($value)) {
-            foreach ($value as $arrayValue) {
-                $this->_validateVariable($name, $arrayValue, true);
-            }
-        }
-
-        if (is_object($value)) {
-            $this->_throwError([
-                'name' => $name,
-                'value' => $value,
-                'isArray' => $isArray,
-            ]);
-        }
-    }
-
-    /**
      * Throws an error from a rendered template.
      */
-    private function _throwError(array $variables = []): void
+    private function _throwError(string $name,  $value): void
     {
-        $variables['componentName'] = $this->_componentName;
+        $variables = [
+            'name' => $name,
+            'value' => $value,
+            'componentName' => $this->_componentName,
+        ];
 
         $content = Craft::$app->getView()->renderPageTemplate('sprig-core/_error', $variables, View::TEMPLATE_MODE_CP);
 

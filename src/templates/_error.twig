@@ -1,24 +1,29 @@
 {% extends '_layouts/message' %}
 
 {% set title = 'Invalid Variable' %}
+{% set isElement = value is instance of('\\craft\\base\\ElementInterface') %}
 
 
 {% block message %}
-
     <h1>
         Invalid variable <code>{{ name }}</code> passed into <code>{{ componentName }}</code>
     </h1>
-
     <p>
-        The variable <code>{{ name }}</code> {{ isArray ? 'is an array that contains' : 'is' }} an object of type <code>{{ className(value) }}</code> and cannot be passed into a Sprig component.
+        The variable <code>{{ name }}</code> is an {{ isElement ? 'element' : 'object' }} of type <code>{{ className(value) }}</code> and cannot be passed into a Sprig component. Allowed types are: <em>strings</em>, <em>numbers</em>, <em>booleans</em> and <em>arrays</em> (primitives).
     </p>
-
-    <p>
-        Allowed value types are: <code>string</code>, <code>number</code>, <code>boolean</code>, <code>array</code> (of primitives) and <code>Element</code>.
-    </p>
-
+    {% if isElement %}
+        <p>
+            Instead of passing an element, consider passing its `id`.
+        </p>
+        <pre><code>{{ '{{' }} sprig('{{ componentName }}', { '{{ name }}Id': {{ name }}.id }) {{ '}}' }}</code></pre>
+        <p>
+            Then in your component you can fetch the element using its `id`.
+        </p>
+        {% if value.className starts with 'craft\\' %}
+            <pre><code>{{ '{%' }} set {{ name }} = craft.{{ value.pluralDisplayName|camel }}.id({{ name }}Id).one() {{ '%}' }}</code></pre>
+        {% endif %}
+    {% endif %}
 {% endblock %}
-
 
 {% css %}
     code {
@@ -32,7 +37,7 @@
     }
     @media (min-width: 900px) {
         .message-container .pane {
-            width: 750px;
+            width: 800px;
         }
     }
 {% endcss %}

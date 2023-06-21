@@ -1,26 +1,42 @@
 {% extends '_layouts/message' %}
 
 {% set title = 'Invalid Variable' %}
-{% set isElement = value is instance of('\\craft\\base\\ElementInterface') %}
-
 
 {% block message %}
     <h1>
         Invalid variable <code>{{ name }}</code> passed into <code>{{ componentName }}</code>
     </h1>
     <p>
-        The variable <code>{{ name }}</code> is an {{ isElement ? 'element' : 'object' }} of type <code>{{ className(value) }}</code> and cannot be passed into a Sprig component. Allowed types are: <em>strings</em>, <em>numbers</em>, <em>booleans</em> and <em>arrays</em> (primitives).
+        The variable <code>{{ name }}</code> is {{ isArray ? 'an array that contains' }} an {{ isElement ? 'element' : 'object' }} of type <code>{{ className }}</code>, which cannot be passed into a Sprig component. Allowed types are: <em>strings</em>, <em>numbers</em>, <em>booleans</em> and <em>arrays</em> (primitives).
     </p>
     {% if isElement %}
-        <p>
-            Instead of passing an element, consider passing its `id`.
-        </p>
-        <pre><code>{{ '{{' }} sprig('{{ componentName }}', { '{{ name }}Id': {{ name }}.id }) {{ '}}' }}</code></pre>
-        <p>
-            Then in your component you can fetch the element using its `id`.
-        </p>
-        {% if value.className starts with 'craft\\' %}
-            <pre><code>{{ '{%' }} set {{ name }} = craft.{{ value.pluralDisplayName|camel }}.id({{ name }}Id).one() {{ '%}' }}</code></pre>
+        {# @var value \craft\base\ElementInterface #}
+        {% if isArray %}
+            <p>
+                Instead of passing in an array of {{ value.pluralLowerDisplayName }}, consider passing in an array of {{ value.lowerDisplayName }} IDs.
+            </p>
+            <pre><code>
+                {{- '{{' }} sprig('{{ componentName }}', { {{ value.lowerDisplayName }}Ids: [1, 2, 3] }) {{ '}}' -}}
+            </code></pre>
+            <p>
+                Then in your component you can fetch the elements using the IDs.
+            </p>
+            {% if isCraftElement %}
+                <pre><code>{{ '{%' }} set {{ name }} = craft.{{ value.pluralDisplayName|camel }}.id({{ value.lowerDisplayName }}Ids).all() {{ '%}' }}</code></pre>
+            {% endif %}
+        {% else %}
+            <p>
+                Instead of passing in an {{ value.lowerDisplayName }}, consider passing in an {{ value.lowerDisplayName }} ID.
+            </p>
+            <pre><code>
+                {{- '{{' }} sprig('{{ componentName }}', { {{ value.lowerDisplayName }}Id: {{ value.lowerDisplayName }}.id }) {{ '}}' -}}
+            </code></pre>
+            <p>
+                Then in your component you can fetch the {{ value.lowerDisplayName }} using the ID.
+            </p>
+            {% if isCraftElement %}
+                <pre><code>{{ '{%' }} set {{ name }} = craft.{{ value.pluralDisplayName|camel }}.id({{ value.lowerDisplayName }}Id).one() {{ '%}' }}</code></pre>
+            {% endif %}
         {% endif %}
     {% endif %}
 {% endblock %}
@@ -31,6 +47,7 @@
         border-radius: .25rem;
         background-color: rgb(241, 245, 253);
         color: #476582;
+        font-size: 1em !important;
     }
     .message-container .pane {
         width: 90%;

@@ -535,16 +535,16 @@ class ComponentsService extends BaseComponent
     /**
      * Validates a variable.
      */
-    private function _validateVariable(string $name, mixed $value): void
+    private function _validateVariable(string $name, mixed $value, bool $isArray = false): void
     {
         if (is_array($value)) {
             foreach ($value as $variable) {
-                $this->_validateVariable($name, $variable);
+                $this->_validateVariable($name, $variable, true);
             }
         }
 
         if (is_object($value)) {
-            $this->_throwError($name, $value);
+            $this->_throwError($name, $value, $isArray);
         }
     }
 
@@ -563,11 +563,15 @@ class ComponentsService extends BaseComponent
     /**
      * Throws an error from a rendered template.
      */
-    private function _throwError(string $name,  $value): void
+    private function _throwError(string $name,  mixed $value, bool $isArray = false): void
     {
         $variables = [
             'name' => $name,
             'value' => $value,
+            'isArray' => $isArray,
+            'isElement' => $value instanceof ElementInterface,
+            'isCraftElement' => str_starts_with($value::class, 'craft\\'),
+            'className' => $value::class,
             'componentName' => $this->_componentName,
         ];
 
